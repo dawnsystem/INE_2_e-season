@@ -5,6 +5,7 @@ import pandas as pd
 import os
 from datetime import datetime
 import traceback
+import re
 
 class INEApp:
     def __init__(self, root):
@@ -169,12 +170,10 @@ todos los términos de este aviso legal."""
         type_frame = ttk.LabelFrame(main_frame, text="Tipo de Cuestionario", padding="10")
         type_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=10)
         
-        ttk.Button(type_frame, text="Cargar archivos manualmente (uno por uno)", 
-                   command=self.load_weekly_files, width=35).pack(side=tk.LEFT, padx=5)
         ttk.Button(type_frame, text="Cargar archivos desde carpeta (automático)", 
                    command=self.auto_load_files, width=35).pack(side=tk.LEFT, padx=5)
-        ttk.Button(type_frame, text="Cuestionario Mensual (Próximamente)", 
-                   state='disabled', width=30).pack(side=tk.LEFT, padx=5)
+        ttk.Button(type_frame, text="Cuestionario Mensual", 
+                   command=self.open_monthly_questionnaire, width=30).pack(side=tk.LEFT, padx=5)
         
         # Crear Notebook para pestañas
         self.notebook = ttk.Notebook(main_frame)
@@ -250,8 +249,8 @@ todos los términos de este aviso legal."""
         action_frame = ttk.Frame(self.tab1)
         action_frame.pack(pady=10)
         
-        self.export_button = ttk.Button(action_frame, text="Exportar a Excel", 
-                                        command=self.export_to_excel, state='disabled')
+        self.export_button = ttk.Button(action_frame, text="Exportar Todo a Excel", 
+                                        command=self.export_all_to_excel, state='disabled')
         self.export_button.pack(side=tk.LEFT, padx=5)
         
         ttk.Button(action_frame, text="Limpiar Datos", 
@@ -288,8 +287,8 @@ todos los términos de este aviso legal."""
         action_frame = ttk.Frame(self.tab2)
         action_frame.pack(pady=10)
         
-        self.export_button2 = ttk.Button(action_frame, text="Exportar a Excel", 
-                                         command=self.export_alojamientos, state='disabled')
+        self.export_button2 = ttk.Button(action_frame, text="Exportar Todo a Excel", 
+                                         command=self.export_all_to_excel, state='disabled')
         self.export_button2.pack(side=tk.LEFT, padx=5)
         
         # Label informativo
@@ -325,8 +324,8 @@ todos los términos de este aviso legal."""
         action_frame = ttk.Frame(self.tab3)
         action_frame.pack(pady=10)
         
-        self.export_button3 = ttk.Button(action_frame, text="Exportar a Excel", 
-                                         command=self.export_pricing, state='disabled')
+        self.export_button3 = ttk.Button(action_frame, text="Exportar Todo a Excel", 
+                                         command=self.export_all_to_excel, state='disabled')
         self.export_button3.pack(side=tk.LEFT, padx=5)
         
         # Label informativo
@@ -971,6 +970,53 @@ todos los términos de este aviso legal."""
             tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
             self.tree.insert('', 'end', values=values, tags=(tag,))
     
+    def export_all_to_excel(self):
+        """Exportar todos los datos disponibles a un único archivo Excel con múltiples hojas"""
+        # Verificar qué datos están disponibles
+        has_data = False
+        sheets_to_export = {}
+        
+        if self.df_combined is not None and not self.df_combined.empty:
+            sheets_to_export['Llegadas y Pernoctaciones'] = self.df_combined
+            has_data = True
+            
+        if self.df_alojamientos is not None and not self.df_alojamientos.empty:
+            sheets_to_export['Alojamientos Ocupados'] = self.df_alojamientos
+            has_data = True
+            
+        if self.df_pricing is not None and not self.df_pricing.empty:
+            # Excluir la fila de TOTAL para el export
+            df_pricing_export = self.df_pricing[self.df_pricing['Tipo de Tarifa'] != 'TOTAL'].copy()
+            sheets_to_export['Precios'] = df_pricing_export
+            has_data = True
+        
+        if not has_data:
+            messagebox.showwarning("Advertencia", "No hay datos para exportar")
+            return
+        
+        try:
+            # Pedir ubicación para guardar
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".xlsx",
+                filetypes=[("Excel files", "*.xlsx")],
+                initialfile=f"INE_Completo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            )
+            
+            if file_path:
+                # Crear Excel con múltiples hojas
+                with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+                    for sheet_name, df in sheets_to_export.items():
+                        df.to_excel(writer, sheet_name=sheet_name, index=False)
+                
+                # Informar qué se exportó
+                exported_sheets = ', '.join(sheets_to_export.keys())
+                messagebox.showinfo("Éxito", 
+                    f"Archivo exportado correctamente:\n{file_path}\n\nHojas exportadas:\n{exported_sheets}")
+                self.status_label.config(text="Exportación completada", foreground="green")
+        
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al exportar: {str(e)}")
+    
     def export_to_excel(self):
         """Exportar los datos a Excel"""
         if self.df_combined is None or self.df_combined.empty:
@@ -1017,6 +1063,166 @@ todos los términos de este aviso legal."""
         self.notebook.tab(1, state='disabled')  # Deshabilitar segunda pestaña
         self.notebook.tab(2, state='disabled')  # Deshabilitar tercera pestaña
         self.status_label.config(text="Esperando carga de archivos...", foreground="blue")
+
+    def open_monthly_questionnaire(self):
+        """Abrir ventana para el cuestionario mensual"""
+        monthly_window = tk.Toplevel(self.root)
+        monthly_window.title("INE - Cuestionario Mensual")
+        monthly_window.geometry("600x400")
+        monthly_window.resizable(False, False)
+        
+        # Hacer la ventana modal
+        monthly_window.transient(self.root)
+        monthly_window.grab_set()
+        
+        # Frame principal
+        main_frame = ttk.Frame(monthly_window, padding="20")
+        main_frame.pack(fill='both', expand=True)
+        
+        # Título
+        title_label = ttk.Label(main_frame, 
+                               text="Cuestionario Mensual INE",
+                               font=('Arial', 14, 'bold'))
+        title_label.pack(pady=(0, 20))
+        
+        # Frame para botones
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=10)
+        
+        # Variables para almacenar datos
+        self.monthly_data = None
+        self.monthly_results = None
+        
+        # Label de estado
+        status_label = ttk.Label(main_frame, text="Seleccione el archivo de estadísticas mensuales", 
+                                foreground="blue")
+        status_label.pack(pady=10)
+        
+        # Frame para resultados
+        results_frame = ttk.LabelFrame(main_frame, text="Resultados INE Mensual", padding="15")
+        results_frame.pack(fill='both', expand=True, pady=20)
+        
+        # Labels para mostrar resultados
+        result_labels = {
+            'viajeros': ttk.Label(results_frame, text="1. Viajeros: -", font=('Arial', 12)),
+            'pernoctaciones': ttk.Label(results_frame, text="2. Pernoctaciones: -", font=('Arial', 12)),
+            'parcelas': ttk.Label(results_frame, text="3. Parcelas totales ocupadas: -", font=('Arial', 12))
+        }
+        
+        for label in result_labels.values():
+            label.pack(pady=8, anchor='w')
+        
+        # Botón exportar (inicialmente deshabilitado)
+        export_btn = ttk.Button(button_frame, text="Exportar Resultados", state='disabled')
+        
+        def load_monthly_file():
+            """Cargar y procesar archivo mensual"""
+            try:
+                file_path = filedialog.askopenfilename(
+                    title="Seleccionar archivo de estadísticas mensuales",
+                    filetypes=[("Excel files", "*.xlsx *.xls")],
+                    initialdir=os.path.dirname(os.path.abspath(__file__))
+                )
+                
+                if not file_path:
+                    return
+                
+                # Verificar que sea un archivo de estadísticas mensuales
+                if 'statistiques pour le mois' not in os.path.basename(file_path).lower():
+                    response = messagebox.askyesno("Advertencia", 
+                        "El archivo no parece ser de estadísticas mensuales.\n¿Desea continuar de todos modos?")
+                    if not response:
+                        return
+                
+                # Cargar archivo
+                status_label.config(text="Procesando archivo...", foreground="orange")
+                monthly_window.update()
+                
+                df = pd.read_excel(file_path)
+                
+                # Verificar columnas necesarias
+                required_cols = ['Nb de personnes', 'Nb de nuit', 'Nb de places']
+                missing_cols = [col for col in required_cols if col not in df.columns]
+                
+                if missing_cols:
+                    messagebox.showerror("Error", 
+                        f"El archivo no contiene las columnas necesarias:\n{', '.join(missing_cols)}")
+                    return
+                
+                # Calcular resultados
+                viajeros = int(df['Nb de personnes'].sum())
+                pernoctaciones = int((df['Nb de nuit'] * df['Nb de personnes']).sum())
+                parcelas_ocupadas = int(df['Nb de places'].sum())
+                
+                # Guardar resultados
+                self.monthly_results = {
+                    'Viajeros': viajeros,
+                    'Pernoctaciones': pernoctaciones,
+                    'Parcelas totales ocupadas': parcelas_ocupadas
+                }
+                
+                # Actualizar labels
+                result_labels['viajeros'].config(
+                    text=f"1. Viajeros: {viajeros:,}".replace(',', '.'))
+                result_labels['pernoctaciones'].config(
+                    text=f"2. Pernoctaciones: {pernoctaciones:,}".replace(',', '.'))
+                result_labels['parcelas'].config(
+                    text=f"3. Parcelas totales ocupadas: {parcelas_ocupadas:,}".replace(',', '.'))
+                
+                # Habilitar botón exportar
+                export_btn.config(state='normal')
+                
+                # Extraer mes del nombre del archivo
+                filename = os.path.basename(file_path)
+                import re
+                match = re.search(r'mois de (\w+) (\d+)', filename)
+                if match:
+                    mes = match.group(1)
+                    año = match.group(2)
+                    status_label.config(text=f"Datos procesados para {mes} {año}", foreground="green")
+                else:
+                    status_label.config(text="Datos procesados correctamente", foreground="green")
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Error al procesar archivo:\n{str(e)}")
+                status_label.config(text="Error en el procesamiento", foreground="red")
+        
+        def export_monthly_results():
+            """Exportar resultados mensuales a Excel"""
+            if not self.monthly_results:
+                return
+            
+            try:
+                file_path = filedialog.asksaveasfilename(
+                    defaultextension=".xlsx",
+                    filetypes=[("Excel files", "*.xlsx")],
+                    initialfile=f"INE_Mensual_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                )
+                
+                if file_path:
+                    # Crear DataFrame con los resultados
+                    df_results = pd.DataFrame([
+                        {'Concepto': 'Viajeros', 'Valor': self.monthly_results['Viajeros']},
+                        {'Concepto': 'Pernoctaciones', 'Valor': self.monthly_results['Pernoctaciones']},
+                        {'Concepto': 'Parcelas totales ocupadas', 'Valor': self.monthly_results['Parcelas totales ocupadas']}
+                    ])
+                    
+                    # Exportar a Excel
+                    df_results.to_excel(file_path, index=False, sheet_name='INE Mensual')
+                    messagebox.showinfo("Éxito", f"Resultados exportados correctamente:\n{file_path}")
+            
+            except Exception as e:
+                messagebox.showerror("Error", f"Error al exportar: {str(e)}")
+        
+        # Configurar botones
+        ttk.Button(button_frame, text="Cargar Archivo Mensual", 
+                  command=load_monthly_file, width=25).pack(side=tk.LEFT, padx=5)
+        export_btn.config(command=export_monthly_results)
+        export_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Botón cerrar
+        ttk.Button(button_frame, text="Cerrar", 
+                  command=monthly_window.destroy, width=15).pack(side=tk.LEFT, padx=5)
 
 def main():
     root = tk.Tk()
