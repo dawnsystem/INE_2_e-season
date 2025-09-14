@@ -6,12 +6,17 @@ import os
 from datetime import datetime
 import traceback
 import re
+import json
 
 class INEApp:
     def __init__(self, root):
         self.root = root
         self.root.title("INE - Encuestas de Ocupación")
         self.root.geometry("1400x800")
+        
+        # Archivo de historial
+        self.history_file = "historial_exportaciones.json"
+        self.load_history()
         
         # Variables para almacenar los dataframes - Primera pestaña
         self.df_pays_arrivees = None
@@ -174,6 +179,8 @@ todos los términos de este aviso legal."""
                    command=self.auto_load_files, width=35).pack(side=tk.LEFT, padx=5)
         ttk.Button(type_frame, text="Cuestionario Mensual", 
                    command=self.open_monthly_questionnaire, width=30).pack(side=tk.LEFT, padx=5)
+        ttk.Button(type_frame, text="Ver Historial", 
+                   command=self.open_history_window, width=25).pack(side=tk.LEFT, padx=5)
         
         # Crear Notebook para pestañas
         self.notebook = ttk.Notebook(main_frame)
@@ -1010,6 +1017,44 @@ todos los términos de este aviso legal."""
                 
                 # Informar qué se exportó
                 exported_sheets = ', '.join(sheets_to_export.keys())
+                
+                # Guardar en historial con estructura completa incluyendo columnas
+                datos_historial = {
+                    "pestanas": list(sheets_to_export.keys()),
+                    "llegadas_pernoctaciones": {
+                        "columnas": [],
+                        "datos": []
+                    },
+                    "alojamientos": {
+                        "columnas": [],
+                        "datos": []
+                    },
+                    "precios": {
+                        "columnas": [],
+                        "datos": []
+                    }
+                }
+                
+                # Guardar datos de llegadas/pernoctaciones con columnas
+                if self.df_combined is not None and not self.df_combined.empty:
+                    datos_historial["llegadas_pernoctaciones"]["columnas"] = self.df_combined.columns.tolist()
+                    datos_historial["llegadas_pernoctaciones"]["datos"] = self.df_combined.values.tolist()
+                
+                # Guardar datos de alojamientos con columnas
+                if self.df_alojamientos is not None and not self.df_alojamientos.empty:
+                    datos_historial["alojamientos"]["columnas"] = self.df_alojamientos.columns.tolist()
+                    datos_historial["alojamientos"]["datos"] = self.df_alojamientos.values.tolist()
+                
+                # Guardar datos de precios con columnas
+                if self.df_pricing is not None and not self.df_pricing.empty:
+                    # Excluir la fila de TOTAL
+                    df_pricing_sin_total = self.df_pricing[self.df_pricing['Tipo de Tarifa'] != 'TOTAL']
+                    datos_historial["precios"]["columnas"] = df_pricing_sin_total.columns.tolist()
+                    datos_historial["precios"]["datos"] = df_pricing_sin_total.values.tolist()
+                
+                self.add_to_history("Semanal", file_path, datos_historial, 
+                                   f"Pestañas: {exported_sheets}")
+                
                 messagebox.showinfo("Éxito", 
                     f"Archivo exportado correctamente:\n{file_path}\n\nHojas exportadas:\n{exported_sheets}")
                 self.status_label.config(text="Exportación completada", foreground="green")
@@ -1064,6 +1109,288 @@ todos los términos de este aviso legal."""
         self.notebook.tab(2, state='disabled')  # Deshabilitar tercera pestaña
         self.status_label.config(text="Esperando carga de archivos...", foreground="blue")
 
+    def load_weekly_data_from_history(self, datos):
+        """Cargar datos semanales desde el historial con nuevo formato"""
+        try:
+            print(f"DEBUG: Cargando datos desde historial. Keys disponibles: {datos.keys()}")
+            
+            # Verificar si estamos usando el nuevo formato o el antiguo
+            if "llegadas_pernoctaciones" in datos:
+                # Nuevo formato con columnas y datos estructurados
+                self.load_weekly_data_new_format(datos)
+            else:
+                # Formato antiguo - intentar cargar lo que se pueda
+                self.load_weekly_data_old_format(datos)
+                
+        except Exception as e:
+            print(f"DEBUG ERROR: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Error", f"Error al cargar datos: {str(e)}")
+    
+    def load_weekly_data_new_format(self, datos):
+        """Cargar datos con el nuevo formato que incluye columnas"""
+        try:
+            # Reconstruir DataFrames desde los datos guardados
+            if datos.get("llegadas_pernoctaciones") and datos["llegadas_pernoctaciones"]["datos"]:
+                columnas = datos["llegadas_pernoctaciones"]["columnas"]
+                data = datos["llegadas_pernoctaciones"]["datos"]
+                self.df_combined = pd.DataFrame(data, columns=columnas)
+                print(f"DEBUG: DataFrame llegadas_pernoctaciones reconstruido con {len(data)} filas")
+                
+                # Actualizar la visualización en la primera pestaña
+                self.display_data()
+            
+            if datos.get("alojamientos") and datos["alojamientos"]["datos"]:
+                columnas = datos["alojamientos"]["columnas"]
+                data = datos["alojamientos"]["datos"]
+                self.df_alojamientos = pd.DataFrame(data, columns=columnas)
+                print(f"DEBUG: DataFrame alojamientos reconstruido con {len(data)} filas")
+                
+                # Actualizar la visualización en la segunda pestaña
+                self.update_alojamientos_display()
+                self.notebook.tab(1, state='normal')
+            
+            if datos.get("precios") and datos["precios"]["datos"]:
+                columnas = datos["precios"]["columnas"]
+                data = datos["precios"]["datos"]
+                self.df_pricing = pd.DataFrame(data, columns=columnas)
+                print(f"DEBUG: DataFrame precios reconstruido con {len(data)} filas")
+                
+                # Actualizar la visualización en la tercera pestaña
+                self.update_pricing_display()
+                self.notebook.tab(2, state='normal')
+            
+            # Habilitar botones de exportación
+            if self.df_combined is not None:
+                self.export_button.config(state='normal')
+            if self.df_alojamientos is not None:
+                self.export_button2.config(state='normal')
+            if self.df_pricing is not None:
+                self.export_button3.config(state='normal')
+            
+            # Actualizar estado
+            self.status_label.config(text="Datos cargados desde historial", foreground="green")
+            print("DEBUG: Datos cargados exitosamente con nuevo formato")
+            
+        except Exception as e:
+            print(f"Error en load_weekly_data_new_format: {e}")
+            traceback.print_exc()
+            raise
+    
+    def load_weekly_data_old_format(self, datos):
+        """Cargar datos con el formato antiguo para compatibilidad"""
+        try:
+            print("DEBUG: Usando formato antiguo de datos")
+            
+            # Limpiar tablas actuales
+            if hasattr(self, 'regiones_tree'):
+                for item in self.regiones_tree.get_children():
+                    self.regiones_tree.delete(item)
+            
+            if hasattr(self, 'paises_tree'):
+                for item in self.paises_tree.get_children():
+                    self.paises_tree.delete(item)
+            
+            if hasattr(self, 'ocupacion_tree'):
+                for item in self.ocupacion_tree.get_children():
+                    self.ocupacion_tree.delete(item)
+            
+            if hasattr(self, 'precios_tree'):
+                for item in self.precios_tree.get_children():
+                    self.precios_tree.delete(item)
+            
+            # Variable para rastrear si faltan árboles
+            missing_trees = False
+            
+            # Cargar datos de regiones
+            if 'regiones' in datos and len(datos['regiones']) > 0:
+                if hasattr(self, 'regiones_tree'):
+                    print(f"DEBUG: Cargando {len(datos['regiones'])} regiones")
+                    for row in datos['regiones']:
+                        self.regiones_tree.insert('', 'end', values=row)
+                else:
+                    print("DEBUG: El árbol de regiones no existe aún")
+                    missing_trees = True
+            else:
+                print("DEBUG: No hay datos de regiones en el historial")
+            
+            # Cargar datos de países
+            if 'paises' in datos and len(datos['paises']) > 0:
+                if hasattr(self, 'paises_tree'):
+                    print(f"DEBUG: Cargando {len(datos['paises'])} países")
+                    for row in datos['paises']:
+                        self.paises_tree.insert('', 'end', values=row)
+                else:
+                    print("DEBUG: El árbol de países no existe aún")
+                    missing_trees = True
+            else:
+                print("DEBUG: No hay datos de países en el historial")
+            
+            # Cargar datos de ocupación si existen
+            if 'ocupacion' in datos and len(datos['ocupacion']) > 0:
+                if hasattr(self, 'ocupacion_tree'):
+                    print(f"DEBUG: Cargando {len(datos['ocupacion'])} registros de ocupación")
+                    for row in datos['ocupacion']:
+                        self.ocupacion_tree.insert('', 'end', values=row)
+                else:
+                    print("DEBUG: El árbol de ocupación no existe aún")
+                    missing_trees = True
+            else:
+                print("DEBUG: No hay datos de ocupación en el historial")
+            
+            # Cargar datos de precios si existen
+            if 'precios' in datos and len(datos['precios']) > 0:
+                if hasattr(self, 'precios_tree'):
+                    print(f"DEBUG: Cargando {len(datos['precios'])} registros de precios")
+                    for row in datos['precios']:
+                        self.precios_tree.insert('', 'end', values=row)
+                else:
+                    print("DEBUG: El árbol de precios no existe aún")
+                    missing_trees = True
+            else:
+                print("DEBUG: No hay datos de precios en el historial")
+            
+            # Habilitar pestañas si hay datos
+            if 'ocupacion' in datos and len(datos['ocupacion']) > 0:
+                self.notebook.tab(1, state='normal')
+            if 'precios' in datos and len(datos['precios']) > 0:
+                self.notebook.tab(2, state='normal')
+            
+            # Mostrar mensaje si faltan árboles
+            if missing_trees:
+                messagebox.showinfo(
+                    "Carga parcial de datos",
+                    "Los datos del historial están guardados correctamente.\n\n" +
+                    "Para visualizar todos los datos:\n" +
+                    "1. Vaya a la pestaña 'Cargar Archivos'\n" +
+                    "2. Cargue los archivos Excel correspondientes\n" +
+                    "3. Luego podrá ver todos los datos del historial"
+                )
+            
+            # Actualizar estado
+            self.status_label.config(text="Datos cargados desde historial", foreground="green")
+            print("DEBUG: Datos cargados exitosamente")
+            
+        except Exception as e:
+            print(f"DEBUG ERROR: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Error", f"Error al cargar datos: {str(e)}")
+    
+    def open_monthly_questionnaire_with_data(self, datos):
+        """Abrir ventana mensual con datos precargados desde historial"""
+        try:
+            print(f"DEBUG: Abriendo ventana mensual con datos: {datos}")
+            
+            monthly_window = tk.Toplevel(self.root)
+            monthly_window.title("INE - Cuestionario Mensual (Datos desde Historial)")
+            monthly_window.geometry("600x400")
+            monthly_window.resizable(False, False)
+            
+            # Hacer la ventana modal
+            monthly_window.transient(self.root)
+            monthly_window.grab_set()
+            
+            # Frame principal
+            main_frame = ttk.Frame(monthly_window, padding="20")
+            main_frame.pack(fill='both', expand=True)
+            
+            # Título
+            title_label = ttk.Label(main_frame, 
+                                   text="Cuestionario Mensual INE - Datos Cargados",
+                                   font=('Arial', 14, 'bold'))
+            title_label.pack(pady=(0, 20))
+            
+            # Label de estado
+            status_label = ttk.Label(main_frame, text="Datos cargados desde historial", 
+                                    foreground="green")
+            status_label.pack(pady=5)
+            
+            # Frame para resultados
+            results_frame = ttk.LabelFrame(main_frame, text="Resultados INE Mensual", padding="15")
+            results_frame.pack(fill='both', expand=True, pady=10)
+            
+            # Cargar valores desde datos
+            viajeros = datos.get('viajeros', 0)
+            pernoctaciones = datos.get('pernoctaciones', 0)
+            parcelas = datos.get('parcelas', 0)
+            
+            print(f"DEBUG: Valores cargados - V:{viajeros}, P:{pernoctaciones}, Pa:{parcelas}")
+            
+            # Labels para mostrar resultados
+            ttk.Label(results_frame, 
+                     text=f"1. Viajeros: {viajeros:,}".replace(',', '.'),
+                     font=('Arial', 12)).pack(pady=8, anchor='w')
+            ttk.Label(results_frame, 
+                     text=f"2. Pernoctaciones: {pernoctaciones:,}".replace(',', '.'),
+                     font=('Arial', 12)).pack(pady=8, anchor='w')
+            ttk.Label(results_frame, 
+                     text=f"3. Parcelas totales ocupadas: {parcelas:,}".replace(',', '.'),
+                     font=('Arial', 12)).pack(pady=8, anchor='w')
+            
+            # Crear variable local para resultados
+            monthly_results_local = {
+                'Viajeros': viajeros,
+                'Pernoctaciones': pernoctaciones,
+                'Parcelas totales ocupadas': parcelas
+            }
+            
+            def export_monthly_results():
+                """Re-exportar resultados mensuales"""
+                nonlocal monthly_results_local
+                try:
+                    file_path = filedialog.asksaveasfilename(
+                        defaultextension=".xlsx",
+                        filetypes=[("Excel files", "*.xlsx")],
+                        initialfile=f"INE_Mensual_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                    )
+                    
+                    if file_path:
+                        # Crear DataFrame con los resultados
+                        df_results = pd.DataFrame([
+                            {'Concepto': 'Viajeros', 'Valor': monthly_results_local['Viajeros']},
+                            {'Concepto': 'Pernoctaciones', 'Valor': monthly_results_local['Pernoctaciones']},
+                            {'Concepto': 'Parcelas totales ocupadas', 'Valor': monthly_results_local['Parcelas totales ocupadas']}
+                        ])
+                        
+                        # Exportar a Excel
+                        df_results.to_excel(file_path, index=False, sheet_name='INE Mensual')
+                        
+                        # Añadir al historial
+                        self.add_to_history(
+                            tipo="Mensual",
+                            archivo=file_path,
+                            datos_exportados={
+                                'viajeros': monthly_results_local['Viajeros'],
+                                'pernoctaciones': monthly_results_local['Pernoctaciones'],
+                                'parcelas': monthly_results_local['Parcelas totales ocupadas']
+                            },
+                            resumen=f"V:{monthly_results_local['Viajeros']} P:{monthly_results_local['Pernoctaciones']} Pa:{monthly_results_local['Parcelas totales ocupadas']}"
+                        )
+                        
+                        messagebox.showinfo("Éxito", f"Resultados re-exportados correctamente:\n{file_path}")
+                
+                except Exception as e:
+                    messagebox.showerror("Error", f"Error al exportar: {str(e)}")
+            
+            # Frame para botones
+            button_frame = ttk.Frame(main_frame)
+            button_frame.pack(pady=10, side='bottom')
+            
+            # Botón para re-exportar
+            ttk.Button(button_frame, text="Re-exportar a Excel", 
+                      command=export_monthly_results).pack(side='left', padx=5)
+            
+            # Botón cerrar
+            ttk.Button(button_frame, text="Cerrar", 
+                      command=monthly_window.destroy).pack(side='left', padx=5)
+        
+        except Exception as e:
+            print(f"Error en open_monthly_questionnaire_with_data: {e}")
+            traceback.print_exc()
+            messagebox.showerror("Error", f"Error al abrir ventana mensual: {str(e)}")
+    
     def open_monthly_questionnaire(self):
         """Abrir ventana para el cuestionario mensual"""
         monthly_window = tk.Toplevel(self.root)
@@ -1089,9 +1416,8 @@ todos los términos de este aviso legal."""
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(pady=10)
         
-        # Variables para almacenar datos
-        self.monthly_data = None
-        self.monthly_results = None
+        # Variables para almacenar datos (NO usar self aquí porque estamos en una función local)
+        monthly_data = None
         
         # Label de estado
         status_label = ttk.Label(main_frame, text="Seleccione el archivo de estadísticas mensuales", 
@@ -1154,8 +1480,9 @@ todos los términos de este aviso legal."""
                 pernoctaciones = int((df['Nb de nuit'] * df['Nb de personnes']).sum())
                 parcelas_ocupadas = int(df['Nb de places'].sum())
                 
-                # Guardar resultados
-                self.monthly_results = {
+                # Guardar resultados en variable no-local
+                nonlocal monthly_data
+                monthly_data = {
                     'Viajeros': viajeros,
                     'Pernoctaciones': pernoctaciones,
                     'Parcelas totales ocupadas': parcelas_ocupadas
@@ -1189,7 +1516,13 @@ todos los términos de este aviso legal."""
         
         def export_monthly_results():
             """Exportar resultados mensuales a Excel"""
-            if not self.monthly_results:
+            nonlocal monthly_data
+            print(f"DEBUG: Iniciando exportación mensual")
+            print(f"DEBUG: monthly_data = {monthly_data}")
+            
+            if not monthly_data:
+                print("DEBUG: No hay resultados mensuales para exportar")
+                messagebox.showwarning("Advertencia", "No hay resultados mensuales para exportar")
                 return
             
             try:
@@ -1200,18 +1533,39 @@ todos los términos de este aviso legal."""
                 )
                 
                 if file_path:
+                    print(f"DEBUG: Exportando a {file_path}")
                     # Crear DataFrame con los resultados
                     df_results = pd.DataFrame([
-                        {'Concepto': 'Viajeros', 'Valor': self.monthly_results['Viajeros']},
-                        {'Concepto': 'Pernoctaciones', 'Valor': self.monthly_results['Pernoctaciones']},
-                        {'Concepto': 'Parcelas totales ocupadas', 'Valor': self.monthly_results['Parcelas totales ocupadas']}
+                        {'Concepto': 'Viajeros', 'Valor': monthly_data['Viajeros']},
+                        {'Concepto': 'Pernoctaciones', 'Valor': monthly_data['Pernoctaciones']},
+                        {'Concepto': 'Parcelas totales ocupadas', 'Valor': monthly_data['Parcelas totales ocupadas']}
                     ])
+                    
+                    print(f"DEBUG: DataFrame creado:\n{df_results}")
                     
                     # Exportar a Excel
                     df_results.to_excel(file_path, index=False, sheet_name='INE Mensual')
+                    print(f"DEBUG: Excel guardado exitosamente")
+                    
+                    # Añadir al historial
+                    self.add_to_history(
+                        tipo="Mensual",
+                        archivo=file_path,
+                        datos_exportados={
+                            'viajeros': monthly_data['Viajeros'],
+                            'pernoctaciones': monthly_data['Pernoctaciones'],
+                            'parcelas': monthly_data['Parcelas totales ocupadas']
+                        },
+                        resumen=f"V:{monthly_data['Viajeros']} P:{monthly_data['Pernoctaciones']} Pa:{monthly_data['Parcelas totales ocupadas']}"
+                    )
+                    print(f"DEBUG: Añadido al historial")
+                    
                     messagebox.showinfo("Éxito", f"Resultados exportados correctamente:\n{file_path}")
             
             except Exception as e:
+                print(f"DEBUG ERROR al exportar: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 messagebox.showerror("Error", f"Error al exportar: {str(e)}")
         
         # Configurar botones
@@ -1223,6 +1577,289 @@ todos los términos de este aviso legal."""
         # Botón cerrar
         ttk.Button(button_frame, text="Cerrar", 
                   command=monthly_window.destroy, width=15).pack(side=tk.LEFT, padx=5)
+
+    def load_history(self):
+        """Cargar historial desde archivo JSON"""
+        try:
+            if os.path.exists(self.history_file):
+                with open(self.history_file, 'r', encoding='utf-8') as f:
+                    self.history = json.load(f)
+            else:
+                self.history = {"exportaciones": []}
+        except Exception as e:
+            print(f"Error cargando historial: {e}")
+            self.history = {"exportaciones": []}
+    
+    def save_history(self):
+        """Guardar historial en archivo JSON"""
+        try:
+            with open(self.history_file, 'w', encoding='utf-8') as f:
+                json.dump(self.history, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Error guardando historial: {e}")
+    
+    def add_to_history(self, tipo, archivo, datos_exportados, resumen=None):
+        """Añadir nueva entrada al historial"""
+        entry = {
+            "id": datetime.now().strftime("%Y%m%d_%H%M%S_%f"),
+            "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "tipo": tipo,
+            "archivo": os.path.basename(archivo) if archivo else "No guardado",
+            "datos": datos_exportados,
+            "resumen": resumen
+        }
+        
+        self.history["exportaciones"].insert(0, entry)  # Insertar al principio
+        self.save_history()
+    
+    def open_history_window(self):
+        """Abrir ventana de historial de exportaciones"""
+        history_window = tk.Toplevel(self.root)
+        history_window.title("Historial de Exportaciones")
+        history_window.geometry("900x600")
+        
+        # Frame principal
+        main_frame = ttk.Frame(history_window, padding="10")
+        main_frame.pack(fill='both', expand=True)
+        
+        # Título
+        title_label = ttk.Label(main_frame, text="Historial de Exportaciones INE",
+                               font=('Arial', 14, 'bold'))
+        title_label.pack(pady=(0, 10))
+        
+        # Frame para la tabla
+        table_frame = ttk.Frame(main_frame)
+        table_frame.pack(fill='both', expand=True)
+        
+        # Scrollbars
+        scroll_y = ttk.Scrollbar(table_frame)
+        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Treeview para mostrar historial
+        columns = ('Fecha', 'Tipo', 'Archivo', 'Resumen')
+        tree = ttk.Treeview(table_frame, columns=columns, show='headings',
+                           yscrollcommand=scroll_y.set, height=15)
+        
+        # Configurar columnas
+        tree.heading('Fecha', text='Fecha y Hora')
+        tree.column('Fecha', width=150)
+        tree.heading('Tipo', text='Tipo')
+        tree.column('Tipo', width=100)
+        tree.heading('Archivo', text='Archivo Exportado')
+        tree.column('Archivo', width=250)
+        tree.heading('Resumen', text='Resumen de Datos')
+        tree.column('Resumen', width=350)
+        
+        tree.pack(side=tk.LEFT, fill='both', expand=True)
+        scroll_y.config(command=tree.yview)
+        
+        # Cargar datos del historial
+        def refresh_history():
+            # Limpiar tabla
+            for item in tree.get_children():
+                tree.delete(item)
+            
+            # Cargar historial actualizado
+            self.load_history()
+            
+            # Insertar datos
+            for entry in self.history.get("exportaciones", []):
+                fecha = entry.get("fecha", "")
+                tipo = entry.get("tipo", "")
+                archivo = entry.get("archivo", "")
+                
+                # Crear resumen según el tipo
+                resumen = ""
+                if tipo == "Semanal":
+                    datos = entry.get("datos", {})
+                    pestanas = datos.get("pestanas", [])
+                    resumen = f"Pestañas: {', '.join(pestanas)}"
+                elif tipo == "Mensual":
+                    datos = entry.get("datos", {})
+                    resumen = f"V:{datos.get('viajeros', 0)} P:{datos.get('pernoctaciones', 0)} Pa:{datos.get('parcelas', 0)}"
+                
+                if entry.get("resumen"):
+                    resumen = entry.get("resumen")
+                
+                entry_id = entry.get("id", "")
+                print(f"DEBUG: Insertando en tree con ID: {entry_id}")
+                tree.insert('', 'end', values=(fecha, tipo, archivo, resumen),
+                           tags=(entry_id,))
+        
+        # Frame para botones
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill='x', pady=(10, 0))
+        
+        def delete_selected():
+            """Eliminar entrada seleccionada"""
+            selected = tree.selection()
+            if not selected:
+                messagebox.showwarning("Advertencia", "Seleccione una entrada para eliminar")
+                return
+            
+            if messagebox.askyesno("Confirmar", "¿Eliminar la entrada seleccionada?"):
+                item = tree.item(selected[0])
+                entry_id = item['tags'][0] if item['tags'] else None
+                
+                if entry_id:
+                    # Reconstruir el ID con underscores
+                    entry_id = str(entry_id)
+                    if len(entry_id) >= 15 and '_' not in entry_id:
+                        entry_id = f"{entry_id[:8]}_{entry_id[8:14]}_{entry_id[14:]}"
+                    
+                    print(f"DEBUG: Intentando eliminar entrada con ID: {entry_id}")
+                    
+                    # Buscar y eliminar del historial
+                    initial_count = len(self.history["exportaciones"])
+                    self.history["exportaciones"] = [
+                        e for e in self.history["exportaciones"] 
+                        if e.get("id") != entry_id
+                    ]
+                    final_count = len(self.history["exportaciones"])
+                    
+                    if initial_count > final_count:
+                        self.save_history()
+                        refresh_history()
+                        messagebox.showinfo("Éxito", "Entrada eliminada del historial")
+                    else:
+                        print(f"WARNING: No se encontró entrada con ID {entry_id}")
+                        messagebox.showwarning("Advertencia", "No se pudo eliminar la entrada")
+        
+        def view_details():
+            """Cargar datos de la entrada seleccionada en las pestañas"""
+            try:
+                selected = tree.selection()
+                if not selected:
+                    messagebox.showwarning("Advertencia", "Seleccione una entrada para cargar datos")
+                    return
+                
+                print(f"DEBUG view_details: Entrada seleccionada")
+                item = tree.item(selected[0])
+                # Los tags en Tkinter eliminan underscores, necesitamos reconstruir el ID
+                entry_id = item['tags'][0] if item['tags'] else None
+                if entry_id:
+                    # Reconstruir el ID con underscores
+                    entry_id = str(entry_id)
+                    if len(entry_id) >= 15 and '_' not in entry_id:
+                        # Formato esperado: YYYYMMDD_HHMMSS_microseconds
+                        entry_id = f"{entry_id[:8]}_{entry_id[8:14]}_{entry_id[14:]}"
+                print(f"DEBUG view_details: ID de entrada reconstruido: {entry_id}")
+                
+                # Buscar entrada en el historial
+                entry = None
+                print(f"DEBUG: IDs disponibles en historial:")
+                for e in self.history["exportaciones"]:
+                    print(f"  - {e.get('id')}")
+                    if e.get("id") == entry_id:
+                        entry = e
+                        break
+                
+                if entry:
+                    tipo = entry.get("tipo", "")
+                    datos = entry.get("datos", {})
+                    print(f"DEBUG view_details: Tipo={tipo}, Datos keys={datos.keys() if datos else 'None'}")
+                    
+                    # Cerrar ventana de historial
+                    history_window.destroy()
+                    
+                    if tipo == "Semanal":
+                        print(f"DEBUG view_details: Cargando datos semanales")
+                        # Cargar datos semanales en las pestañas
+                        self.load_weekly_data_from_history(datos)
+                        messagebox.showinfo("Datos Cargados", 
+                            f"Datos semanales cargados desde el historial\nFecha: {entry.get('fecha', '')}")
+                        
+                    elif tipo == "Mensual":
+                        print(f"DEBUG view_details: Cargando datos mensuales")
+                        # Abrir ventana mensual y cargar datos
+                        self.open_monthly_questionnaire_with_data(datos)
+                        messagebox.showinfo("Datos Cargados", 
+                            f"Datos mensuales cargados desde el historial\nFecha: {entry.get('fecha', '')}")
+                else:
+                    print(f"DEBUG view_details: No se encontró la entrada con ID {entry_id}")
+            except Exception as e:
+                print(f"DEBUG ERROR en view_details: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                messagebox.showerror("Error", f"Error al cargar datos: {str(e)}")
+        
+        # Botones
+        ttk.Button(button_frame, text="Cargar Datos", command=view_details,
+                  width=15).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Eliminar", command=delete_selected,
+                  width=15).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Actualizar", command=refresh_history,
+                  width=15).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cerrar", command=history_window.destroy,
+                  width=15).pack(side=tk.RIGHT, padx=5)
+        
+        # Cargar historial inicial
+        refresh_history()
+
+    def update_alojamientos_display(self):
+        """Actualizar la visualización de alojamientos en la segunda pestaña"""
+        try:
+            if self.df_alojamientos is None or self.df_alojamientos.empty:
+                return
+            
+            # Limpiar tabla existente
+            for item in self.tree2.get_children():
+                self.tree2.delete(item)
+            
+            # Configurar columnas
+            columns = list(self.df_alojamientos.columns)
+            self.tree2['columns'] = columns
+            self.tree2.heading('#0', text='', width=0, stretch=tk.NO)
+            
+            for col in columns:
+                self.tree2.heading(col, text=col)
+                width = 100 if col == columns[0] else 80
+                self.tree2.column(col, width=width, anchor='center')
+            
+            # Insertar filas
+            for idx, row in self.df_alojamientos.iterrows():
+                self.tree2.insert('', 'end', values=row.tolist())
+            
+            print(f"DEBUG: Actualizada visualización de alojamientos con {len(self.df_alojamientos)} filas")
+            
+        except Exception as e:
+            print(f"Error en update_alojamientos_display: {e}")
+            traceback.print_exc()
+    
+    def update_pricing_display(self):
+        """Actualizar la visualización de precios en la tercera pestaña"""
+        try:
+            if self.df_pricing is None or self.df_pricing.empty:
+                return
+            
+            # Limpiar tabla existente
+            for item in self.tree3.get_children():
+                self.tree3.delete(item)
+            
+            # Configurar columnas
+            columns = list(self.df_pricing.columns)
+            self.tree3['columns'] = columns
+            self.tree3.heading('#0', text='', width=0, stretch=tk.NO)
+            
+            for col in columns:
+                self.tree3.heading(col, text=col)
+                width = 400 if col == columns[0] else 100
+                self.tree3.column(col, width=width, anchor='w' if col == columns[0] else 'center')
+            
+            # Insertar filas
+            for idx, row in self.df_pricing.iterrows():
+                values = row.tolist()
+                tag = 'total' if row[self.df_pricing.columns[0]] == 'TOTAL' else ''
+                self.tree3.insert('', 'end', values=values, tags=(tag,))
+            
+            # Configurar estilo para fila TOTAL
+            self.tree3.tag_configure('total', background='#e0e0e0', font=('Arial', 9, 'bold'))
+            
+            print(f"DEBUG: Actualizada visualización de precios con {len(self.df_pricing)} filas")
+            
+        except Exception as e:
+            print(f"Error en update_pricing_display: {e}")
+            traceback.print_exc()
 
 def main():
     root = tk.Tk()
