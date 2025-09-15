@@ -14,6 +14,14 @@ class INEApp:
         self.root.title("INE - Encuestas de Ocupación")
         self.root.geometry("1400x800")
         
+        # Establecer el icono de la ventana
+        try:
+            import os
+            if os.path.exists("logo_ine.ico"):
+                self.root.iconbitmap("logo_ine.ico")
+        except Exception as e:
+            print(f"No se pudo cargar el icono: {e}")
+        
         # Archivo de historial
         self.history_file = "historial_exportaciones.json"
         self.load_history()
@@ -1140,6 +1148,7 @@ todos los términos de este aviso legal."""
                 
                 # Actualizar la visualización en la primera pestaña
                 self.display_data()
+                self.notebook.tab(0, state='normal')  # Habilitar primera pestaña
             
             if datos.get("alojamientos") and datos["alojamientos"]["datos"]:
                 columnas = datos["alojamientos"]["columnas"]
@@ -1149,7 +1158,7 @@ todos los términos de este aviso legal."""
                 
                 # Actualizar la visualización en la segunda pestaña
                 self.update_alojamientos_display()
-                self.notebook.tab(1, state='normal')
+                self.notebook.tab(1, state='normal')  # Habilitar segunda pestaña
             
             if datos.get("precios") and datos["precios"]["datos"]:
                 columnas = datos["precios"]["columnas"]
@@ -1159,7 +1168,7 @@ todos los términos de este aviso legal."""
                 
                 # Actualizar la visualización en la tercera pestaña
                 self.update_pricing_display()
-                self.notebook.tab(2, state='normal')
+                self.notebook.tab(2, state='normal')  # Habilitar tercera pestaña
             
             # Habilitar botones de exportación
             if self.df_combined is not None:
@@ -1169,9 +1178,12 @@ todos los términos de este aviso legal."""
             if self.df_pricing is not None:
                 self.export_button3.config(state='normal')
             
+            # Cambiar a la primera pestaña de datos para mostrar los datos cargados
+            self.notebook.select(0)  # Mostrar la primera pestaña con datos
+            
             # Actualizar estado
-            self.status_label.config(text="Datos cargados desde historial", foreground="green")
-            print("DEBUG: Datos cargados exitosamente con nuevo formato")
+            self.status_label.config(text="Datos cargados desde historial - Todas las pestañas actualizadas", foreground="green")
+            print("DEBUG: Datos cargados exitosamente con nuevo formato en todas las pestañas")
             
         except Exception as e:
             print(f"Error en load_weekly_data_new_format: {e}")
@@ -1809,11 +1821,12 @@ todos los términos de este aviso legal."""
             # Configurar columnas
             columns = list(self.df_alojamientos.columns)
             self.tree2['columns'] = columns
-            self.tree2.heading('#0', text='', width=0, stretch=tk.NO)
+            self.tree2.heading('#0', text='')
+            self.tree2.column('#0', width=0, stretch=tk.NO)
             
             for col in columns:
                 self.tree2.heading(col, text=col)
-                width = 100 if col == columns[0] else 80
+                width = 200 if col == columns[0] else 80
                 self.tree2.column(col, width=width, anchor='center')
             
             # Insertar filas
@@ -1839,7 +1852,8 @@ todos los términos de este aviso legal."""
             # Configurar columnas
             columns = list(self.df_pricing.columns)
             self.tree3['columns'] = columns
-            self.tree3.heading('#0', text='', width=0, stretch=tk.NO)
+            self.tree3.heading('#0', text='')
+            self.tree3.column('#0', width=0, stretch=tk.NO)
             
             for col in columns:
                 self.tree3.heading(col, text=col)
