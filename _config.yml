@@ -1,0 +1,5 @@
+theme: jekyll-theme-cayman
+title: INE Transformer 4 E-Season
+description: Sistema automatizado para procesar datos de E-Season para encuestas INE
+show_downloads: true
+google_analytics:

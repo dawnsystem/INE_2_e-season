@@ -3,6 +3,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)](https://www.microsoft.com/windows)
+[![GitHub release](https://img.shields.io/github/release/dawnsystem/INE_2_e-season.svg)](https://GitHub.com/dawnsystem/INE_2_e-season/releases/)
+[![GitHub issues](https://img.shields.io/github/issues/dawnsystem/INE_2_e-season.svg)](https://GitHub.com/dawnsystem/INE_2_e-season/issues/)
+[![Build Status](https://github.com/dawnsystem/INE_2_e-season/workflows/Build%20and%20Release/badge.svg)](https://github.com/dawnsystem/INE_2_e-season/actions)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
 Sistema automatizado para procesar y transformar datos de E-Season PMS al formato requerido por el Instituto Nacional de Estadística (INE) de España.
 
@@ -45,14 +49,14 @@ Los datos se procesan automáticamente y se muestran organizados por categorías
 
 ### Opción 1: Usar el ejecutable (Recomendado)
 
-1. Descargar `INE_4_e-season.exe` desde [Releases](../../releases)
+1. Descargar `INE_4_e-season.exe` desde [Releases](https://github.com/dawnsystem/INE_2_e-season/releases)
 2. Ejecutar directamente (no requiere instalación)
 
 ### Opción 2: Ejecutar desde código fuente
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/tu-usuario/ine_transformer.git
+git clone https://github.com/dawnsystem/INE_2_e-season.git
 
 # Instalar dependencias
 pip install -r requirements.txt
