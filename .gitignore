@@ -1,0 +1,45 @@
+# Claude AI
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+dist/
+build/
+
+# PyInstaller
+*.spec
+*.manifest
+
+# Excel temporales
+~$*.xlsx
+*.xlsx#
+
+# Archivos de respaldo
+*.backup
+*_backup.*
+*.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Archivos temporales de Windows
+*.tmp
+~*
