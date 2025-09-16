@@ -27,22 +27,68 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
 
+    - name: Create version info
+      run: |
+        @"
+        VSVersionInfo(
+          ffi=FixedFileInfo(
+            filevers=(4, 1, 0, 0),
+            prodvers=(4, 1, 0, 0),
+            mask=0x3f,
+            flags=0x0,
+            OS=0x40004,
+            fileType=0x1,
+            subtype=0x0,
+            date=(0, 0)
+          ),
+          kids=[
+            StringFileInfo(
+              [
+                StringTable(
+                  '040904B0',
+                  [
+                    StringStruct('CompanyName', 'Capfun Spain'),
+                    StringStruct('FileDescription', 'INE Transformer para E-Season PMS'),
+                    StringStruct('FileVersion', '4.1.0.0'),
+                    StringStruct('InternalName', 'INE_4_e-season'),
+                    StringStruct('LegalCopyright', 'Copyright 2024 David Arenas - MIT License'),
+                    StringStruct('OriginalFilename', 'INE_4_e-season.exe'),
+                    StringStruct('ProductName', 'INE Transformer 4 E-Season'),
+                    StringStruct('ProductVersion', '4.1.0.0')
+                  ]
+                )
+              ]
+            ),
+            VarFileInfo([VarStruct('Translation', [1033, 1200])])
+          ]
+        )
+        "@ | Out-File -Encoding utf8 version_info.txt
+
     - name: Build executable
       run: |
-        pyinstaller --onefile --windowed --icon=logo_ine.ico --name=INE_4_e-season --clean --noconfirm --add-data "logo_ine.png;." --add-data "logo_ine.ico;." --hidden-import=tkinter --hidden-import=PIL --hidden-import=PIL.Image --hidden-import=PIL.ImageTk --hidden-import=pandas --hidden-import=openpyxl --hidden-import=xlrd --hidden-import=xlwt --hidden-import=xlsxwriter --distpath=dist --workpath=build --specpath=. ine_app_v3.py
+        pyinstaller --noconfirm --onefile --windowed --name="INE_4_e-season" --icon="logo_ine.ico" --version-file="version_info.txt" --manifest="ine_app.manifest" --add-data "logo_ine.ico;." --add-data "logo_ine.png;." --hidden-import="tkinter" --hidden-import="pandas" --hidden-import="openpyxl" --hidden-import="PIL._tkinter_finder" --exclude-module="matplotlib" --exclude-module="scipy" --exclude-module="test" --clean --log-level=WARN ine_app_v3.py
 
-    - name: Create security info file
+    - name: Calculate SHA256 and create info files
+      shell: pwsh
       run: |
-        echo "# Información de Seguridad" > dist/SECURITY_INFO.txt
-        echo "" >> dist/SECURITY_INFO.txt
-        echo "Este ejecutable ha sido creado con PyInstaller y puede ser detectado como falso positivo por algunos antivirus." >> dist/SECURITY_INFO.txt
-        echo "" >> dist/SECURITY_INFO.txt
-        echo "Para solucionarlo:" >> dist/SECURITY_INFO.txt
-        echo "1. Agregar el archivo a la lista de exclusiones de tu antivirus" >> dist/SECURITY_INFO.txt
-        echo "2. Desactivar temporalmente la protección en tiempo real" >> dist/SECURITY_INFO.txt
-        echo "3. Ejecutar como administrador si es necesario" >> dist/SECURITY_INFO.txt
-        echo "" >> dist/SECURITY_INFO.txt
-        echo "El código fuente está disponible en: https://github.com/${{ github.repository }}" >> dist/SECURITY_INFO.txt
+        $hash = (Get-FileHash -Path "dist\INE_4_e-season.exe" -Algorithm SHA256).Hash
+        $hash | Out-File -FilePath "dist\INE_4_e-season.exe.sha256"
+
+        @"
+# Información de Seguridad
+
+Este ejecutable ha sido creado con PyInstaller y puede ser detectado como falso positivo por algunos antivirus.
+
+SHA256: $hash
+
+Para solucionarlo:
+1. Verificar el hash SHA256 del archivo
+2. Agregar el archivo a la lista de exclusiones de tu antivirus
+3. Desactivar temporalmente la protección en tiempo real
+4. Ejecutar como administrador si es necesario
+
+El código fuente está disponible en: https://github.com/${{ github.repository }}
+"@ | Out-File -FilePath "dist\SECURITY_INFO.txt"
 
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
@@ -52,29 +98,49 @@ jobs:
         tag_name: ${{ github.ref_name }}
         name: Release ${{ github.ref_name }}
         body: |
-          ## Cambios en esta versión
+          ## 🆕 Cambios en esta versión
 
-          ### Características
+          ### ✨ Mejoras de Seguridad
+          - Añadido manifiesto de Windows para reducir falsos positivos
+          - Información de versión embebida en el ejecutable
+          - Hash SHA256 incluido para verificación
+          - Documentación de seguridad mejorada
+
+          ### 📋 Características
           - Procesamiento automático de archivos E-Season
           - Generación de cuestionarios semanales y mensuales
           - Sistema de historial integrado
-          - Mejoras en la detección de antivirus
+          - Interfaz gráfica intuitiva
 
-          ### Instalación
+          ### 📥 Instalación
+
+          #### Opción 1: Ejecutable directo
           1. Descargar `INE_4_e-season.exe`
-          2. Si tu antivirus lo detecta como amenaza:
-             - Es un **falso positivo** común con PyInstaller
-             - Agrega el archivo a las exclusiones de tu antivirus
-             - O desactiva temporalmente la protección en tiempo real
-          3. Ejecutar directamente (no requiere instalación)
+          2. Verificar el hash SHA256 (ver archivo `.sha256`)
+          3. Si tu antivirus lo detecta:
+             - Es un **FALSO POSITIVO** común con PyInstaller
+             - Ver [SECURITY.md](https://github.com/${{ github.repository }}/blob/main/SECURITY.md) para soluciones
+          4. Ejecutar directamente
 
-          ### ⚠️ Nota de Seguridad
-          Este ejecutable puede ser detectado como falso positivo por algunos antivirus debido a cómo PyInstaller empaqueta el código. El código fuente está disponible públicamente para verificación.
+          #### Opción 2: Desde código fuente (recomendado si hay problemas)
+          ```bash
+          git clone https://github.com/${{ github.repository }}.git
+          pip install -r requirements.txt
+          python ine_app_v3.py
+          ```
 
-          ### Documentación
-          Ver el [Manual de Usuario](https://github.com/${{ github.repository }}/blob/main/docs/MANUAL_USUARIO_COMPLETO.md)
+          ### 🛡️ Seguridad
+          - **Hash SHA256**: Incluido en los archivos de release
+          - **Código abierto**: Todo el código es auditable
+          - **Sin telemetría**: Funciona completamente offline
+
+          ### 📚 Documentación
+          - [Manual de Usuario](https://github.com/${{ github.repository }}/blob/main/docs/MANUAL_USUARIO_COMPLETO.md)
+          - [Información de Seguridad](https://github.com/${{ github.repository }}/blob/main/SECURITY.md)
+          - [Cómo Contribuir](https://github.com/${{ github.repository }}/blob/main/CONTRIBUTING.md)
         draft: false
         prerelease: false
         files: |
           ./dist/INE_4_e-season.exe
+          ./dist/INE_4_e-season.exe.sha256
           ./dist/SECURITY_INFO.txt

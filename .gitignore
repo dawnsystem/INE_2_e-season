@@ -15,7 +15,7 @@ build/
 
 # PyInstaller
 *.spec
-*.manifest
+# *.manifest - Necesitamos el manifiesto para reducir falsos positivos
 
 # Excel temporales
 ~$*.xlsx
