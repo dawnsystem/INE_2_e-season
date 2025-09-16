@@ -131,7 +131,7 @@ Ver [DISCLAIMER.md](DISCLAIMER.md) para más información.
 
 ## 👨‍💻 Autor
 
-**David Arenas**
+**Dawnsystem - David Arenas**
 
 - Email: darenas@capfun.com
 - Desarrollado para: Campings Capfun España
