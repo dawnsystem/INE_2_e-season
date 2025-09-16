@@ -27,46 +27,9 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
 
-    - name: Create version info
-      run: |
-        @"
-        VSVersionInfo(
-          ffi=FixedFileInfo(
-            filevers=(4, 1, 0, 0),
-            prodvers=(4, 1, 0, 0),
-            mask=0x3f,
-            flags=0x0,
-            OS=0x40004,
-            fileType=0x1,
-            subtype=0x0,
-            date=(0, 0)
-          ),
-          kids=[
-            StringFileInfo(
-              [
-                StringTable(
-                  '040904B0',
-                  [
-                    StringStruct('CompanyName', 'Capfun Spain'),
-                    StringStruct('FileDescription', 'INE Transformer para E-Season PMS'),
-                    StringStruct('FileVersion', '4.1.0.0'),
-                    StringStruct('InternalName', 'INE_4_e-season'),
-                    StringStruct('LegalCopyright', 'Copyright 2024 David Arenas - MIT License'),
-                    StringStruct('OriginalFilename', 'INE_4_e-season.exe'),
-                    StringStruct('ProductName', 'INE Transformer 4 E-Season'),
-                    StringStruct('ProductVersion', '4.1.0.0')
-                  ]
-                )
-              ]
-            ),
-            VarFileInfo([VarStruct('Translation', [1033, 1200])])
-          ]
-        )
-        "@ | Out-File -Encoding utf8 version_info.txt
-
     - name: Build executable
       run: |
-        pyinstaller --noconfirm --onefile --windowed --name="INE_4_e-season" --icon="logo_ine.ico" --version-file="version_info.txt" --manifest="ine_app.manifest" --add-data "logo_ine.ico;." --add-data "logo_ine.png;." --hidden-import="tkinter" --hidden-import="pandas" --hidden-import="openpyxl" --hidden-import="PIL._tkinter_finder" --exclude-module="matplotlib" --exclude-module="scipy" --exclude-module="test" --clean --log-level=WARN ine_app_v3.py
+        pyinstaller --noconfirm --onefile --windowed --name="INE_4_e-season" --icon="logo_ine.ico" --add-data "logo_ine.ico;." --add-data "logo_ine.png;." --hidden-import="tkinter" --hidden-import="pandas" --hidden-import="openpyxl" --hidden-import="PIL._tkinter_finder" --exclude-module="matplotlib" --exclude-module="scipy" --exclude-module="test" --clean --log-level=WARN ine_app_v3.py
 
     - name: Calculate SHA256 and create info files
       shell: pwsh
@@ -74,8 +37,9 @@ jobs:
         $hash = (Get-FileHash -Path "dist\INE_4_e-season.exe" -Algorithm SHA256).Hash
         $hash | Out-File -FilePath "dist\INE_4_e-season.exe.sha256"
 
-        @"
-# Información de Seguridad
+        $content = @"
+Información de Seguridad
+========================
 
 Este ejecutable ha sido creado con PyInstaller y puede ser detectado como falso positivo por algunos antivirus.
 
@@ -88,7 +52,8 @@ Para solucionarlo:
 4. Ejecutar como administrador si es necesario
 
 El código fuente está disponible en: https://github.com/${{ github.repository }}
-"@ | Out-File -FilePath "dist\SECURITY_INFO.txt"
+"@
+        $content | Out-File -FilePath "dist\SECURITY_INFO.txt" -Encoding UTF8
 
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
