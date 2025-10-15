@@ -1479,7 +1479,7 @@ todos los términos de este aviso legal."""
                 df = pd.read_excel(file_path)
                 
                 # Verificar columnas necesarias
-                required_cols = ['Nb de personnes', 'Nb de nuit', 'Nb de places']
+                required_cols = ['Nb de personnes', 'Nb de nuit']
                 missing_cols = [col for col in required_cols if col not in df.columns]
                 
                 if missing_cols:
@@ -1490,7 +1490,7 @@ todos los términos de este aviso legal."""
                 # Calcular resultados
                 viajeros = int(df['Nb de personnes'].sum())
                 pernoctaciones = int((df['Nb de nuit'] * df['Nb de personnes']).sum())
-                parcelas_ocupadas = int(df['Nb de places'].sum())
+                parcelas_ocupadas = int(df['Nb de nuit'].sum())
                 
                 # Guardar resultados en variable no-local
                 nonlocal monthly_data
