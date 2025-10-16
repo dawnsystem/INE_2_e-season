@@ -531,13 +531,24 @@ todos los términos de este aviso legal."""
                 else:
                     continue
                 
-                # Sumar valores de cada día
-                for day in range(1, 8):
-                    col_name = f'Jour {day}'
-                    if col_name in self.df_emplacements.columns:
-                        valor = row[col_name]
-                        if pd.notna(valor):
-                            totales[tipo][day-1] += int(valor)
+                # Para parcelas (4.1.1 y 4.1.2): contar parcelas ocupadas, no sumar personas
+                # Para otros tipos: sumar valores (número de unidades)
+                if tipo in ['4.1.1 Parcelas larga duración', '4.1.2 Resto parcelas']:
+                    # Contar 1 parcela ocupada por día si hay algún valor > 0
+                    for day in range(1, 8):
+                        col_name = f'Jour {day}'
+                        if col_name in self.df_emplacements.columns:
+                            valor = row[col_name]
+                            if pd.notna(valor) and int(valor) > 0:
+                                totales[tipo][day-1] += 1  # Contar parcela, no sumar valor
+                else:
+                    # Para bungalows, caravanas, etc: sumar valores
+                    for day in range(1, 8):
+                        col_name = f'Jour {day}'
+                        if col_name in self.df_emplacements.columns:
+                            valor = row[col_name]
+                            if pd.notna(valor):
+                                totales[tipo][day-1] += int(valor)
             
             # Crear DataFrame con los totales
             data = []
