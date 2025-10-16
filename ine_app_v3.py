@@ -387,7 +387,17 @@ todos los términos de este aviso legal."""
                 file_path = os.path.join(folder_path, file)
                 
                 # Detectar archivo de Emplacements
+                # Debe contener 'emplacement' pero NO debe tener 'places' antes de 'emplacement'
+                # Correcto: "Emplacements nus et locatifs Occupés"
+                # Incorrecto: "Places occupées par emplacements" (places aparece antes)
                 if 'emplacement' in file_lower:
+                    # Check if 'places' appears before 'emplacement'
+                    if 'places' in file_lower:
+                        idx_places = file_lower.index('places')
+                        idx_emplacement = file_lower.index('emplacement')
+                        if idx_places < idx_emplacement:
+                            # Skip files where 'places' comes before 'emplacement'
+                            continue
                     files_dict['emplacements'] = file_path
                     files_info.append(f"✓ Emplacements: {file}")
                     continue
